@@ -1,0 +1,784 @@
+	
+			//Taki Project
+	#define _CRT_SECURE_NO_WARNINGS
+	#include <stdio.h>
+	#include <stdlib.h> // in order to use the "rand" and "srand" functions
+	#include <time.h>   // in order to use "time" function
+	#include <stdbool.h>
+	#include <string.h>
+	//define const and sizes
+	#define CARDS_START 4
+	#define MAX_FULL_NAME 21
+	#define MAX_CARDS_STRING 8 //for the print card
+	#define MAX_FREQUENCY 14 //for the statistics - max 14 cards 
+	const char ladder = '#';
+
+	//define cards using numbers
+	//define for color cards
+	#define Y 1
+	#define R 2
+	#define B 3
+	#define G 4
+	#define NO_COLOR_CARD 5
+	//define for numbers cards 1-9
+	#define ONE 1
+	#define TWO 2
+	#define THREE 3
+	#define FOUR 4
+	#define FIVE 5
+	#define SIX 6
+	#define SEVEN 7
+	#define EIGHT 8
+	#define NINE 9
+	//define for special cards
+	#define PLUS_CARD 10
+	#define STOP_CARD 11
+	#define C_DIRECTION 12
+	#define TAKI_COLOR 13
+	#define CHANGE_COLOR 14
+	//define the direction of the game
+	#define RIGHT 1 //1: game goes right direction
+	#define LEFT -1 // -1 game goes to left direction
+
+
+	//Structs defintions:
+	//card contains type and color
+	typedef struct card
+	{
+		int color;
+		int type;
+		int timeTaken;
+	} Card;
+
+	//player has name and cards (games start with four cards but changes within the game)
+	typedef struct player
+	{
+		Card* cards;
+		int cardsArrSize; //games starts with default of four cards to a player
+		int cardsLogicSize; // the number of cards changes during the game
+		char player_name[MAX_FULL_NAME];
+
+	} Player;
+
+	//game contains players, num of player, the player's turn and the direction of the game
+	//also there is always an upper card and always need to check if game is over
+	typedef struct game
+	{
+		Card top_Card;
+		Player* players;
+		Card* frequencyArr; 
+		int num_of_players;
+		int player_turn;
+		int game_direction;
+		bool game_over;
+	} Game;
+
+	//functions declaration
+	void restartGame(Game* game); // function restrat the game and the variables
+	void updateCardsRand(Card cards[], Game* game);//get random cards for each card in the array
+	Card getRandCard(bool upperCard, Game* game); //get cards randomaly from the deck using rand function
+	void playTaki(Game* game);//the whole game is running from this function until there is a winner
+	void printPlayer(Player player);//print player name and cards
+	void printCard(Card card);//print the player cards
+	char printCardColor(int color);//print the color -checking the number and transfer to char
+	bool chooseOrTakeCard(Game* game);// check if player put a valid card and whether or not a player finish his cards
+	void compareCards(Game* game, int choice);//compare between the top card and the card the player chose
+	void caseChangeColorCard(Game* game); // in case the player chose color card
+	void caseTakiCard(Game* game);//in case player chose taki card
+	void casePlusCard(Game* game, int choice);//in case player chose Plus card
+	void caseStopCard(Game* game);//in case player chose Stop card
+	void caseChangeDirectionCard(Game* game); //in case player chose Change direction card
+	bool CheckifValid(Game* game, Card user);// check if the card is valid -return true if its valid and false if its not
+	void changePlayerTurn(Game* game);//change the player turn according to the game direction and number of players
+	void removeCardfromArray(Game* game, int choice);//remove the card that the player chose from his cards
+	void getCardfromDeck(Game* game); //get a card from game, this function calls to the get random cards function
+	void sortFrequencyArr(Game* game);//sort the frequency array in desecnding order so it will show up from the most common card to the least common card
+
+
+	int main()
+	{
+		Game game;
+		printf("************ Welcome to TAKI game !!! ************\n");
+		//First each player get 4 cards randomaly chosen
+		srand(time(NULL));
+		restartGame(&game);//restart the game and its variable
+		playTaki(&game);//start to play the game
+		return 0;
+	}
+
+
+	//functions for the game
+
+	void restartGame(Game* game) // restart all the game variable and elememnts - cards, players and etc
+	{
+		printf("please enter the number of players:\n");
+		scanf("%d", &game->num_of_players);
+		while (game->num_of_players < 1)
+		{
+			printf("Number of players must be at least one. Please try again!\n");
+			printf("please enter the number of players:\n");
+			scanf("%d", &game->num_of_players);
+		}
+		game->frequencyArr = (Card*)malloc(MAX_FREQUENCY * sizeof(Card));
+
+					if(game->frequencyArr == NULL)//if the allocate failed
+					{
+						printf("Memory not allocated! \n");
+						exit(1);//exit the program
+
+					}
+
+
+		for(int i=0; i<MAX_FREQUENCY; i++) // reset frequency arr 
+		{
+			game->frequencyArr[i].type = i+1;
+			game->frequencyArr[i].timeTaken = 0; 
+			
+		}
+		game->players = (Player*)malloc((game->num_of_players) * sizeof(Player));
+				if(game->players == NULL)//if the allocate failed
+					{
+						printf("Memory not allocated! \n");
+						exit(1);//exit the program
+
+					}
+		game->game_over = false;//false - if game is not over, true - if game is over
+		game->player_turn = 0;//the first player, it will be index 0 in the array
+		game->game_direction = RIGHT; //default direction to the right unless a player put change direction card
+		game->top_Card = getRandCard(true, game);//the card that starts the game chosen randomaly
+
+		for (int i = 0; i < game->num_of_players; i++)
+		{
+			printf("Please enter the first name of player %c%d:\n", ladder, i + 1);
+			scanf("%s", game->players[i].player_name);
+			game->players[i].cards = (Card*)malloc(CARDS_START * sizeof(Card));
+					if(game->players[game->player_turn].cards == NULL)//if the allocate failed
+					{
+						printf("Memory not allocated! \n");
+						exit(1);//exit the program
+					}
+			updateCardsRand(game->players[i].cards, game); //get first 4 cards for a player
+			game->players[i].cardsArrSize = CARDS_START; //phizic size default is 4 cards
+			game->players[i].cardsLogicSize = CARDS_START;//logic size in the begining is 4 cards
+		}
+
+		
+	}
+	
+	void updateCardsRand(Card* cards, Game* game)//update the player cards randomaly
+	{
+		for (int i = 0; i < CARDS_START; i++)
+		{
+			cards[i] = getRandCard(false, game);//calling the getRandCard function 
+		}
+	}
+
+	Card getRandCard(bool upperCard, Game* game)//Using the rand function, this function allocte every player and the top card a random card
+	{
+		Card card;
+
+		if (upperCard == true) //if the card is for the top card
+		{
+			card.type = (rand() % 9) + 1; //the top card is only numbers between 1-9 without special cards
+			card.color = (rand() % 4) + 1;
+
+			game->frequencyArr[card.type -1].timeTaken ++;
+		}
+		else //if the card is for the player
+		{
+			card.type = (rand() % 14) + 1;//the cards can be all the cards - 14 cards including the special cards
+			game->frequencyArr[card.type -1].timeTaken ++;
+			if (card.type == CHANGE_COLOR)//if the card the was chosen randonaly is the no color card
+			{
+				card.color = NO_COLOR_CARD;
+			}
+			else //if the color card is a color
+			{
+				card.color = (rand() % 4) + 1;//there are four  color options
+			}
+
+		}
+		return card;
+	}
+
+
+	//the players start to play
+	void playTaki(Game* game)
+	{
+		
+		while (game->game_over == false)
+		{
+			printf("upper card:\n");
+			printCard(game->top_Card);
+			printPlayer(game->players[game->player_turn]);
+			game->game_over = chooseOrTakeCard(game);
+			
+		}
+		printf("The winner is %s! Congratulations!\n\n", game->players[game->player_turn].player_name);
+		sortFrequencyArr(game);
+		printf("************ Game Statistics ************\n");
+		printf("card%c | Frequency\n\n", ladder);
+		printf("__________________\n");
+			for(int i = 0; i<MAX_FREQUENCY; i++)
+			{
+				printf("  %d   |   %d   \n", game->frequencyArr[i].type, game->frequencyArr[i].timeTaken);
+			}
+
+		free(game->players->cards);
+		free(game->players);
+		free(game->frequencyArr);
+	}
+
+	void printPlayer(Player player)// prints the player name and his currents cards
+	{
+		int i;
+
+		printf("%s turn:\n\n", player.player_name);
+
+		for (i = 0; i < player.cardsLogicSize; i++)
+		{
+			printf("Card %c%d:\n", ladder, i + 1);
+
+			printCard(player.cards[i]);
+			printf("\n");
+
+		}
+
+
+	}
+
+	void printCard(Card card)//print the card visually including color and type
+	{
+		char color;
+
+		color = printCardColor(card.color);
+		
+		printf("*********\n");
+		printf("*       *\n");
+		printf("* ");
+
+		if (card.type == TAKI_COLOR)
+		printf(" TAKI *\n");
+		if (card.type == STOP_CARD)
+		printf(" STOP *\n");
+		if (card.type == C_DIRECTION)
+		printf(" <->  *\n");
+		if (card.type == PLUS_CARD)
+		printf("  +   *\n");
+		if (card.type == CHANGE_COLOR)
+		printf("COLOR *\n");
+		if(card.type>=1 && card.type <=9)
+		printf("  %c   *\n", '0' + card.type);
+
+		printf("*   ");
+		printf("%c", color);
+		printf("   *\n");
+		printf("*       *\n");
+		printf("*********\n");
+	}
+
+	char printCardColor(int color)//helping function to transfer from a number to char
+	{
+		switch (color)
+		{
+		case B: //if blue color
+			return 'B';
+			break;
+		case G: //if green color
+			return 'G';
+			break;
+		case Y: //if yellow color
+			return 'Y';
+			break;
+		case R: //if red color
+			return 'R';
+			break;
+		}
+		if (color == NO_COLOR_CARD)
+			return ' ';
+ 
+	}
+
+
+	bool chooseOrTakeCard(Game* game)//the player choose to put his cards or take a card from the deck. program returns true if there is a winner or false so the turn move on
+	{
+		int card_choice;
+		int newChoice;
+		bool is_Valid = false;
+		Player* pCurplayer = &(game->players[game->player_turn]);
+
+		printf("Please enter 0 if you want to take a card from the deck or 1 - %d if you want to put one of your cards in the middle\n", game->players[game->player_turn].cardsLogicSize);
+		scanf("%d", &card_choice);
+		while(card_choice < 0 || card_choice > pCurplayer->cardsLogicSize)//if choise is not valid
+		{
+			printf("Invalid card! Try again.\n");
+			printf("Please enter 0 if you want to take a card from the deck or 1 - %d if you want to put one of your cards in the middle\n", game->players[game->player_turn].cardsLogicSize);
+			scanf("%d", &card_choice);
+		}
+
+		if (card_choice >= 0 && card_choice <= pCurplayer->cardsLogicSize)//if choise is valid
+		{
+			if (card_choice == 0) //if the player chose to take a card from the deck so the game isn't over
+			{
+				getCardfromDeck(game);//get
+				changePlayerTurn(game);
+				return false;	
+			}
+			else
+			{
+				is_Valid = CheckifValid(game, pCurplayer->cards[card_choice - 1]);
+				if (is_Valid)
+				{
+					compareCards(game, card_choice);
+					if (pCurplayer->cardsLogicSize != 0)
+						return false;
+
+					else
+						return true;
+				}
+				if (!is_Valid)
+				{
+					printf("Invalid card! Try again.\n");
+					printf("Please enter 0 if you want to take a card from the deck or 1 - %d if you want to put one of your cards in the middle\n", pCurplayer->cardsLogicSize);
+					scanf("%d", &newChoice);
+
+					while (newChoice > 0 && newChoice < pCurplayer->cardsLogicSize)
+					{
+						is_Valid = CheckifValid(game, pCurplayer->cards[newChoice - 1]);
+						if (is_Valid)
+						{
+							compareCards(game, newChoice);
+							if (pCurplayer->cardsLogicSize != 0)
+								return false;
+
+							else
+								return true;
+						}
+
+						if (!is_Valid)
+						{
+							printf("Invalid card! Try again.\n");
+							printf("Please enter 0 if you want to take a card from the deck or 1 - %d if you want to put one of your cards in the middle\n", pCurplayer->cardsLogicSize);
+							scanf("%d", &newChoice);
+						}
+					}
+					if (newChoice == 0)
+					{
+						getCardfromDeck(game);
+						changePlayerTurn(game);
+						return false;	
+					}
+				}
+				
+			}
+		}
+
+		if (pCurplayer->cardsLogicSize == 0)
+			return true;
+
+		
+	}
+
+
+	void compareCards(Game* game, int choice)//check the player's card choice and update the game
+	{
+
+		if (game->players[game->player_turn].cards[choice - 1].type >= 1 &&
+			game->players[game->player_turn].cards[choice - 1].type <= 9)//if its regurlar number
+		{
+			game->top_Card.type = game->players[game->player_turn].cards[choice - 1].type;
+			game->top_Card.color = game->players[game->player_turn].cards[choice - 1].color;
+			removeCardfromArray(game, choice);
+			game->players[game->player_turn].cardsLogicSize = game->players[game->player_turn].cardsLogicSize - 1;
+			if(game->players[game->player_turn].cardsLogicSize == 0)
+			return; 
+			else
+			{
+			changePlayerTurn(game);
+			return; 
+			}
+			
+		}
+
+		if (game->players[game->player_turn].cards[choice - 1].type == CHANGE_COLOR)//if it is change color card
+		{
+			caseChangeColorCard(game);
+			removeCardfromArray(game, choice);
+			game->players[game->player_turn].cardsLogicSize = game->players[game->player_turn].cardsLogicSize - 1;
+			if(game->players[game->player_turn].cardsLogicSize == 0)
+			return; 
+			else
+			{
+			changePlayerTurn(game);
+			return; 
+			}
+		}
+
+		if (game->players[game->player_turn].cards[choice - 1].type == TAKI_COLOR)//if its taki color card
+		{
+			game->top_Card.type = TAKI_COLOR;
+			game->top_Card.color = game->players[game->player_turn].cards[choice - 1].color;
+			removeCardfromArray(game, choice);
+			game->players[game->player_turn].cardsLogicSize = game->players[game->player_turn].cardsLogicSize - 1;
+			if(game->players[game->player_turn].cardsLogicSize == 0)//if it was the last card
+			return; 
+			else
+			{
+			caseTakiCard(game);//if its not the last card check the other cards the player wants to put on the top card
+			if(game->top_Card.type == STOP_CARD)//if the last card after the taki is a stop card
+				{
+							caseStopCard(game);//need to check that the player didnt finish his cards
+							return; 
+
+				 }
+				if(game->top_Card.type == PLUS_CARD)//if the last card after the taki is a plus card
+				{
+					if(game->players[game->player_turn].cardsLogicSize == 0)
+					{
+						getCardfromDeck(game);//if the player finish his cards he need to take another card from the deck
+						changePlayerTurn(game);//the turn moves to the next player
+						return; 
+
+					}
+					else
+					return; 
+				}
+
+			if(game->top_Card.type == C_DIRECTION)//if the last card after the taki is a change direction card
+			{
+				if(game->players[game->player_turn].cardsLogicSize == 0)
+					{
+						getCardfromDeck(game);//if the player finish his cards he need to take another card from the deck
+						changePlayerTurn(game);
+						return; 
+					}
+
+				caseChangeDirectionCard(game);//change direction function according the game direction - right or left
+				return;
+
+			}
+			}
+		}
+
+			 
+		if (game->players[game->player_turn].cards[choice - 1].type == PLUS_CARD)//if its a plus card
+		{
+			casePlusCard(game, choice);
+			return; 
+
+		}
+		if (game->players[game->player_turn].cards[choice - 1].type == STOP_CARD)//if it is a stop card
+		{
+			
+			game->top_Card.type = game->players[game->player_turn].cards[choice - 1].type;
+			game->top_Card.color = game->players[game->player_turn].cards[choice - 1].color;
+			removeCardfromArray(game, choice);
+			game->players[game->player_turn].cardsLogicSize = game->players[game->player_turn].cardsLogicSize - 1;
+			caseStopCard(game);
+
+			return;
+
+		}
+
+
+		if (game->players[game->player_turn].cards[choice - 1].type == C_DIRECTION)// if its change direction card
+		{
+			game->top_Card.type = game->players[game->player_turn].cards[choice - 1].type;
+			game->top_Card.color = game->players[game->player_turn].cards[choice - 1].color;
+			removeCardfromArray(game, choice);
+			game->players[game->player_turn].cardsLogicSize = game->players[game->player_turn].cardsLogicSize - 1;
+			caseChangeDirectionCard (game);
+
+			return;
+
+
+		}
+		return; 
+	}
+//all this following functions change the game variables and player's details according the card
+	void caseChangeColorCard(Game* game)
+		{
+			printf("Please enter your color choice:\n");
+			printf("1 - Yellow\n 2 - Red\n 3 - Blue\n 4 - Green\n");
+			scanf("%d", &game->top_Card.color);//now the top card's color is updated due the player choice
+			game->top_Card.type = CHANGE_COLOR;
+			return; 
+
+		}
+	void caseTakiCard(Game* game)
+	   {
+		bool isValid = true;
+			int newChoice; 
+			printf("Plese enter 0 if you want to finish your turn or 1 - %d if you want to put one of your cards in the middle:\n", game->players[game->player_turn].cardsLogicSize);
+			scanf("%d", &newChoice);
+					if(newChoice == 0)
+					return;
+					isValid = CheckifValid(game, game->players[game->player_turn].cards[newChoice -1]);//check if choice is valid and matches with top card
+
+			while (newChoice <0 || newChoice > game->players[game->player_turn].cardsLogicSize || isValid == false)
+				{
+					printf("Invalid card! Try again.\n");
+					printf("Plese enter 0 if you want to finish your turn or 1 - %d if you want to put one of your cards in the middle:\n", game->players[game->player_turn].cardsLogicSize);
+					scanf("%d", &newChoice);
+					if(newChoice == 0)
+					return;
+					isValid = CheckifValid(game, game->players[game->player_turn].cards[newChoice -1]);
+				}
+			
+			while (newChoice > 0 && newChoice < game->players[game->player_turn].cardsLogicSize && isValid == true)
+			{
+
+				   if(game->players[game->player_turn].cards[newChoice-1].type == CHANGE_COLOR)//if player put change color after taki it stops and return
+					{
+					removeCardfromArray(game, newChoice);
+					game->players[game->player_turn].cardsLogicSize = game->players[game->player_turn].cardsLogicSize - 1;
+					if(game->players[game->player_turn].cardsLogicSize == 0){
+						return; 
+					}
+					changePlayerTurn(game);
+					return; 	
+					}
+				
+					game->top_Card.type = game->players[game->player_turn].cards[newChoice - 1].type;
+					game->top_Card.color = game->players[game->player_turn].cards[newChoice - 1].color;
+					removeCardfromArray(game, newChoice);
+					game->players[game->player_turn].cardsLogicSize = game->players[game->player_turn].cardsLogicSize - 1;
+
+					if(game->players[game->player_turn].cardsLogicSize == 0) //if the player finish his cards it returns and than it will check the top card
+					{
+						return; 
+					}
+
+					printf("Plese enter 0 if you want to finish your turn or 1 - %d if you want to put one of your cards in the middle:\n", game->players[game->player_turn].cardsLogicSize);
+					scanf("%d", &newChoice);
+					if(newChoice == 0)
+					return; 
+
+					isValid = CheckifValid(game, game->players[game->player_turn].cards[newChoice -1]);
+
+					while (newChoice <0 || newChoice > game->players[game->player_turn].cardsLogicSize || isValid == false)
+				{
+					printf("Invalid card! Try again.\n");
+					printf("Plese enter 0 if you want to finish your turn or 1 - %d if you want to put one of your cards in the middle:\n", game->players[game->player_turn].cardsLogicSize);
+					scanf("%d", &newChoice);
+					if(newChoice == 0)
+					return;
+					isValid = CheckifValid(game, game->players[game->player_turn].cards[newChoice -1]);
+				}
+				
+			}
+				return; 
+
+	}
+	void casePlusCard(Game* game, int choice)
+	{
+			game->top_Card.type = game->players[game->player_turn].cards[choice - 1].type;
+			game->top_Card.color = game->players[game->player_turn].cards[choice - 1].color;
+			removeCardfromArray(game, choice);
+			game->players[game->player_turn].cardsLogicSize = game->players[game->player_turn].cardsLogicSize - 1;
+			if(game->players[game->player_turn].cardsLogicSize == 0)
+			{
+				getCardfromDeck(game);
+			}
+			return; 
+
+	}
+	void caseStopCard(Game* game)
+	{		
+			if(game->num_of_players == 2)
+			{
+				if(game->players[game->player_turn].cardsLogicSize == 0)
+					{
+						getCardfromDeck(game);
+						changePlayerTurn(game);
+						 
+					}
+				
+				return;
+			}
+		
+			if(game->game_direction == RIGHT)
+			{
+				if(game->player_turn == game->num_of_players - 2)
+				game->player_turn = 0; 
+				if(game->player_turn == game->num_of_players - 1)
+				game->player_turn = 1;
+				if (game->player_turn + 2 <= game->num_of_players-1)
+				game->player_turn = game->player_turn + 2;
+				
+				return;
+
+			}
+			if(game->game_direction == LEFT)
+			{
+				if(game->player_turn == 1)
+				game->player_turn = game->num_of_players - 2; 
+				if(game->player_turn == 0)
+				game->player_turn = game->num_of_players - 1; 
+				if(game->player_turn - 2 >=0)
+				game->player_turn = game->player_turn - 2;
+
+				return; 
+
+			}
+
+			return; 
+			
+	}
+	void caseChangeDirectionCard(Game* game)
+	{
+
+			if(game->players[game->player_turn].cardsLogicSize == 0 || game->num_of_players == 2)
+			{
+				game->player_turn = game->player_turn;
+				return; 
+
+			}
+			
+
+			if (game->game_direction == RIGHT)//if the game direction is to the right
+			{
+				game->game_direction = LEFT;//change it to the left
+				if (game->player_turn == 0)//if it is the first player
+					game->player_turn = game->num_of_players - 1;//the turn goes to the last player
+				else
+				{
+					game->player_turn = game->player_turn - 1;//it will go the left player
+				}
+			}
+			if (game->game_direction == LEFT)//if the game direction is to the left
+			{
+				game->game_direction = RIGHT;//change it to the right direction
+				if (game->player_turn == game->num_of_players - 1)//if it is the last player
+					game->player_turn = 0;//the turn goes to the first player
+				else
+				{
+					game->player_turn = game->player_turn + 1;// the turn goes to the right player
+				}
+			}
+
+	}
+
+
+	bool CheckifValid(Game* game, Card userCard)
+	{
+		
+		if (userCard.type == CHANGE_COLOR)//if it change color it will allways match
+		{
+			return true;
+		}
+
+		//if its a special card - not include Change Color card
+		if (userCard.type == STOP_CARD || userCard.type == PLUS_CARD || userCard.type == C_DIRECTION || userCard.type == TAKI_COLOR)
+		{
+			
+			if(userCard.type == game->top_Card.type) 
+			{
+				if(userCard.color == game->top_Card.color)
+				return true;
+			}
+			else
+			{
+				if(userCard.color == game->top_Card.color)
+				return true; 
+
+
+			}
+				return false;
+		}
+		else if(userCard.type >=1 && userCard.type <= 9) //if its regular card it need to match either by number or color
+		{
+			if (userCard.color == game->top_Card.color || userCard.type == game->top_Card.type)
+				return true;
+			else
+				return false;
+		}
+
+	}
+
+	void changePlayerTurn(Game* game)
+	{
+
+		if(game->players[game->player_turn].cardsLogicSize == 0)//if the game is over don't change the player's turn
+		{
+			game->player_turn = game->player_turn; 
+			return; 
+
+		}
+
+		
+		if ((game->game_direction == RIGHT && game->player_turn < game->num_of_players - 1) ||
+			(game->game_direction == LEFT && game->player_turn > 0))
+		{
+			game->player_turn += game->game_direction;
+		}
+		else // in the last player and move right or in first player and move left
+		{
+			if (game->game_direction == LEFT)
+			{
+				game->player_turn = game->num_of_players - 1; 
+			}
+			else
+			{
+				game->player_turn = 0;
+			}
+		}
+	}
+
+	void removeCardfromArray(Game* game, int choice)//put the chosen card in the end and replace it with not chosen card and remove the chosen card
+	{
+
+		Card tempCard; 
+		int lastCard = game->players[game->player_turn].cardsLogicSize;
+
+		if(choice == game->players[game->player_turn].cardsLogicSize)
+		return; 
+		else
+		{
+			tempCard =  game->players[game->player_turn].cards[lastCard-1];
+			game->players[game->player_turn].cards[lastCard-1] = game->players[game->player_turn].cards[choice-1];
+			game->players[game->player_turn].cards[choice-1] = tempCard; 
+
+		}
+
+	}
+
+	void getCardfromDeck(Game* game)// get card from deck
+	{
+				if(game->players[game->player_turn].cardsLogicSize != 0)
+				{
+				if (game->players[game->player_turn].cardsLogicSize == game->players[game->player_turn].cardsArrSize)//if the array phizic size is full
+				{
+					game->players[game->player_turn].cardsArrSize *= 2; //increase the array
+					game->players[game->player_turn].cards = realloc(game->players[game->player_turn].cards, game->players[game->player_turn].cardsArrSize);
+
+					if(game->players[game->player_turn].cards == NULL)//if the allocate failed
+					{
+						printf("Memory not allocated! \n");
+						exit(1);//exit the program
+
+					}
+				}
+				game->players[game->player_turn].cardsLogicSize++;//logic size increases by 1
+				game->players[game->player_turn].cards[game->players[game->player_turn].cardsLogicSize - 1] = getRandCard(false, game);
+				}
+
+				return; 
+			
+	}
+
+	void sortFrequencyArr (Game* game)//sort the frequency array in a decsending order - most common first and least common last
+	{
+		Card tempPlace;
+		int i = 0;
+		for(i = 0; i < MAX_FREQUENCY; i++)
+		{
+			if(game->frequencyArr[i].timeTaken < game->frequencyArr[i+1].timeTaken)
+			{
+				tempPlace = game->frequencyArr[i];
+				game->frequencyArr[i] = game->frequencyArr[i+1];
+				game->frequencyArr[i+1] = tempPlace; 
+			}
+		}
+
+	}
